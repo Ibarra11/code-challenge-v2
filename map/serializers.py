@@ -3,32 +3,28 @@ from rest_framework import serializers
 from map.models import CommunityArea, RestaurantPermit
 
 
+class CommunityAreaListSerializer(serializers.ListSerializer):
+    def to_representation(self, data):
+        result = []
+        for item in data:
+            child_data = self.child.to_representation(item)
+            name = child_data["name"]
+            result.append({name: {"area_id": child_data["area_id"], "num_permits": child_data["num_permits"]}})
+        return result
+
+
 class CommunityAreaSerializer(serializers.ModelSerializer):
     class Meta:
         model = CommunityArea
-        fields = ["name", "num_permits"]
+        fields = ["name", "area_id", "num_permits"]
+        list_serializer_class = CommunityAreaListSerializer
 
     num_permits = serializers.SerializerMethodField()
 
     def get_num_permits(self, obj):
-        """
-        TODO: supplement each community area object with the number
-        of permits issued in the given year.
-
-        e.g. The endpoint /map-data/?year=2017 should return something like:
-        [
-            {
-                "ROGERS PARK": {
-                    area_id: 17,
-                    num_permits: 2
-                },
-                "BEVERLY": {
-                    area_id: 72,
-                    num_permits: 2
-                },
-                ...
-            }
-        ]
-        """
-
-        pass
+        area_id = obj.area_id
+        num_permits = RestaurantPermit.objects.filter(community_area_id=area_id, issue_date__year=self.context["year"]).count()
+        return num_permits
+     
+       
+     
