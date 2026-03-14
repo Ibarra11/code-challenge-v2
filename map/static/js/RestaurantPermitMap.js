@@ -49,12 +49,10 @@ export default function RestaurantPermitMap() {
         if (!res.ok) {
           throw new Error("Failed to fetch data for year: " + year);
         }
-        // Right here , we should also check that the data is valid using something like Zod otherwise, it will break the app.
+        // Right here,we should also check that the data structure  is valid using something like Zod or do it on the backend. Otherwise, it will break the app.
         return res.json();
       })
-      .then((data) => {
-        setCurrentYearData(data);
-      })
+      .then(setCurrentYearData)
       .catch((err) => {
         // report error to something like Sentry
         setError(true);
@@ -96,8 +94,7 @@ export default function RestaurantPermitMap() {
 
     layer.on("mouseover", () => {
       layer.bindPopup(
-        `${numPermits} permits issued in ${feature.properties.community} \n
-        ${percentageOfPermits.toFixed(2)}% of total permits`,
+        `${numPermits} permits issued in ${feature.properties.community}<br>${percentageOfPermits.toFixed(2)}% of total permits`,
       );
       layer.openPopup();
     });
