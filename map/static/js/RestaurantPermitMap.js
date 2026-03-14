@@ -1,25 +1,19 @@
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState } from "react";
 
-import { MapContainer, TileLayer, GeoJSON } from "react-leaflet"
+import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
 
-import "leaflet/dist/leaflet.css"
+import "leaflet/dist/leaflet.css";
 
-import RAW_COMMUNITY_AREAS from "../../../data/raw/community-areas.geojson"
+import RAW_COMMUNITY_AREAS from "../../../data/raw/community-areas.geojson";
+
+const START_YEAR = 2026;
+
+// Generates years from 2026 to 2016
+const YEAR_OPTIONS = [...Array(11).keys()].map((increment) => {
+  return START_YEAR - increment;
+});
 
 function YearSelect({ setFilterVal }) {
-  // Filter by the permit issue year for each restaurant
-  const startYear = 2026
-  const years = [...Array(11).keys()].map((increment) => {
-    return startYear - increment
-  })
-  const options = years.map((year) => {
-    return (
-      <option value={year} key={year}>
-        {year}
-      </option>
-    )
-  })
-
   return (
     <>
       <label htmlFor="yearSelect" className="fs-3">
@@ -30,68 +24,101 @@ function YearSelect({ setFilterVal }) {
         className="form-select form-select-lg mb-3"
         onChange={(e) => setFilterVal(e.target.value)}
       >
-        {options}
+        {YEAR_OPTIONS.map((year) => (
+          <option key={year} value={year}>
+            {year}
+          </option>
+        ))}
       </select>
     </>
-  )
+  );
 }
 
 export default function RestaurantPermitMap() {
-  const communityAreaColors = ["#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"]
+  const communityAreaColors = ["#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"];
+  const [error, setError] = useState(false);
+  const [currentYearData, setCurrentYearData] = useState([]);
+  const [year, setYear] = useState(2026);
 
-  const [currentYearData, setCurrentYearData] = useState([])
-  const [year, setYear] = useState(2026)
-
-  const yearlyDataEndpoint = `/map-data/?year=${year}`
+  const yearlyDataEndpoint = `/map-data/?year=${year}`;
 
   useEffect(() => {
-    fetch()
-      .then((res) => res.json())
-      .then((data) => {
-        /**
-         * TODO: Fetch the data needed to supply to map with data
-         */
+    setError(false);
+    fetch(yearlyDataEndpoint)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("Failed to fetch data for year: " + year);
+        }
+        // Right here , we should also check that the data is valid using something like Zod otherwise, it will break the app.
+        return res.json();
       })
-  }, [yearlyDataEndpoint])
+      .then((data) => {
+        setCurrentYearData(data);
+      })
+      .catch((err) => {
+        // report error to something like Sentry
+        setError(true);
+      });
+  }, [yearlyDataEndpoint]);
 
+  const permitsIssuedThisYear = currentYearData.reduce((acc, curr) => {
+    const area = Object.keys(curr)[0];
+    return acc + curr[area].num_permits;
+  }, 0);
+
+  const maxNumPermitsInSingleArea = currentYearData.reduce((acc, curr) => {
+    const area = Object.keys(curr)[0];
+    return Math.max(acc, curr[area].num_permits);
+  }, 0);
 
   function getColor(percentageOfPermits) {
-    /**
-     * TODO: Use this function in setAreaInteraction to set a community 
-     * area's color using the communityAreaColors constant above
-     */
+    if (percentageOfPermits < 25) {
+      return communityAreaColors[0];
+    } else if (percentageOfPermits < 50) {
+      return communityAreaColors[1];
+    } else if (percentageOfPermits < 75) {
+      return communityAreaColors[2];
+    } else {
+      return communityAreaColors[3];
+    }
   }
 
   function setAreaInteraction(feature, layer) {
-    /**
-     * TODO: Use the methods below to:
-     * 1) Shade each community area according to what percentage of 
-     * permits were issued there in the selected year
-     * 2) On hover, display a popup with the community area's raw 
-     * permit count for the year
-     */
-    layer.setStyle()
-    layer.on("", () => {
-      layer.bindPopup("")
-      layer.openPopup()
-    })
+    const permitData = currentYearData.find(
+      (data) => data[feature.properties.community],
+    );
+
+    const numPermits = permitData[feature.properties.community].num_permits;
+    const percentageOfPermits = (numPermits / permitsIssuedThisYear) * 100;
+    const color = getColor(percentageOfPermits);
+
+    layer.setStyle({ fillColor: color });
+
+    layer.on("mouseover", () => {
+      layer.bindPopup(
+        `${numPermits} permits issued in ${feature.properties.community} \n
+        ${percentageOfPermits.toFixed(2)}% of total permits`,
+      );
+      layer.openPopup();
+    });
   }
 
   return (
     <>
+      {error ? (
+        <p className="fs-4 text-danger bg-danger-subtle p-3 rounded-3">
+          There was an error loading the data: Try selecting a different year.
+        </p>
+      ) : null}
       <YearSelect filterVal={year} setFilterVal={setYear} />
       <p className="fs-4">
-        Restaurant permits issued this year: {/* TODO: display this value */}
+        Restaurant permits issued this year: {permitsIssuedThisYear}
       </p>
       <p className="fs-4">
         Maximum number of restaurant permits in a single area:
-        {/* TODO: display this value */}
+        {maxNumPermitsInSingleArea}
       </p>
-      <MapContainer
-        id="restaurant-map"
-        center={[41.88, -87.62]}
-        zoom={10}
-      >
+      <MapContainer id="restaurant-map" center={[41.88, -87.62]} zoom={10}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"
@@ -100,10 +127,10 @@ export default function RestaurantPermitMap() {
           <GeoJSON
             data={RAW_COMMUNITY_AREAS}
             onEachFeature={setAreaInteraction}
-            key={maxNumPermits}
+            key={year}
           />
         ) : null}
       </MapContainer>
     </>
-  )
+  );
 }
