@@ -7,6 +7,12 @@ from rest_framework.test import APIClient
 from map.models import CommunityArea, RestaurantPermit
 
 
+EXPECTED_DATA = {
+    "Beverly": {"area_id": 1, "num_permits": 2},
+    "Lincoln Park": {"area_id": 2, "num_permits": 3},
+}
+
+
 @pytest.mark.django_db
 def test_map_data_view():
     # Create some test community areas
@@ -36,6 +42,15 @@ def test_map_data_view():
     client = APIClient()
     response = client.get(reverse("map_data", query={"year": 2021}))
 
-    # TODO: Complete the test by asserting that the /map-data/ endpoint
-    # returns the correct number of permits for Beverly and Lincoln 
-    # Park in 2021
+    data = response.data
+
+    beverly_item = next((item for item in data if "Beverly" in item), None)
+    beverly_data = beverly_item["Beverly"] if beverly_item else None
+
+    lincoln_park_item = next((item for item in data if "Lincoln Park" in item), None)
+    lincoln_park_data = lincoln_park_item["Lincoln Park"] if lincoln_park_item else None
+
+    assert beverly_data is not None
+    assert lincoln_park_data is not None
+    assert beverly_data["num_permits"] == EXPECTED_DATA["Beverly"]["num_permits"]
+    assert lincoln_park_data["num_permits"] == EXPECTED_DATA["Lincoln Park"]["num_permits"]
