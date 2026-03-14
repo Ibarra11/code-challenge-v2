@@ -37,7 +37,7 @@ function YearSelect({ setFilterVal }) {
 export default function RestaurantPermitMap() {
   const communityAreaColors = ["#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"];
   const [error, setError] = useState(false);
-  const [currentYearData, setCurrentYearData] = useState([]);
+  const [currentYearData, setCurrentYearData] = useState({});
   const [year, setYear] = useState(2026);
 
   const yearlyDataEndpoint = `/map-data/?year=${year}`;
@@ -52,22 +52,24 @@ export default function RestaurantPermitMap() {
         // Right here,we should also check that the data structure  is valid using something like Zod or do it on the backend. Otherwise, it will break the app.
         return res.json();
       })
-      .then(setCurrentYearData)
+      .then((data) => {
+        setCurrentYearData(data[0]);
+      })
       .catch((err) => {
         // report error to something like Sentry
         setError(true);
       });
   }, [yearlyDataEndpoint]);
 
-  const permitsIssuedThisYear = currentYearData.reduce((acc, curr) => {
-    const area = Object.keys(curr)[0];
-    return acc + curr[area].num_permits;
-  }, 0);
+  const permitsIssuedThisYear = Object.values(currentYearData).reduce(
+    (acc, curr) => acc + curr.num_permits,
+    0,
+  );
 
-  const maxNumPermitsInSingleArea = currentYearData.reduce((acc, curr) => {
-    const area = Object.keys(curr)[0];
-    return Math.max(acc, curr[area].num_permits);
-  }, 0);
+  const maxNumPermitsInSingleArea = Object.values(currentYearData).reduce(
+    (acc, curr) => Math.max(acc, curr.num_permits),
+    0,
+  );
 
   function getColor(percentageOfPermits) {
     if (percentageOfPermits < 25) {
@@ -82,11 +84,10 @@ export default function RestaurantPermitMap() {
   }
 
   function setAreaInteraction(feature, layer) {
-    const permitData = currentYearData.find(
-      (data) => data[feature.properties.community],
-    );
+    const permitData = currentYearData[feature.properties.community];
+    if (!permitData) return;
 
-    const numPermits = permitData[feature.properties.community].num_permits;
+    const numPermits = permitData.num_permits;
     const percentageOfPermits = (numPermits / permitsIssuedThisYear) * 100;
     const color = getColor(percentageOfPermits);
 
@@ -120,7 +121,7 @@ export default function RestaurantPermitMap() {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"
         />
-        {currentYearData.length > 0 ? (
+        {Object.keys(currentYearData).length > 0 ? (
           <GeoJSON
             data={RAW_COMMUNITY_AREAS}
             onEachFeature={setAreaInteraction}
